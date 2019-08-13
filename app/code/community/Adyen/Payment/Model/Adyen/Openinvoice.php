@@ -87,6 +87,9 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
     
     public function getOptionalFormFields($adyFields,$order) {
         if (empty($order)) return $adyFields;
+        
+        $secretWord = $this->_getSecretWord();
+        
         $billingAddress = $order->getBillingAddress();
         $adyFields['shopper.firstName'] = $billingAddress->getFirstname();
         $adyFields['shopper.lastName'] = $billingAddress->getLastname();
@@ -104,7 +107,6 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
                 $adyFields['billingAddress.country']
         ;
         //Generate HMAC encrypted merchant signature
-        $secretWord = $this->_getSecretWord();
         $signMac = Zend_Crypt_Hmac::compute($secretWord, 'sha1', $sign);
         $adyFields['billingAddressSig'] = base64_encode(pack('H*', $signMac));
 
@@ -131,12 +133,13 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
 	        $adyFields['deliveryAddressSig'] = base64_encode(pack('H*', $signMac));
    	 	}
         
-        
+   	 	
         if ($adyFields['shopperReference'] != self::GUEST_ID) {
             $customer = Mage::getModel('customer/customer')->load($adyFields['shopperReference']);
             $adyFields['shopper.gender'] = strtoupper($this->getCustomerAttributeText($customer, 'gender'));
             $adyFields['shopper.infix'] = $customer->getPrefix();
             $dob = $customer->getDob();
+            
             if (!empty($dob)) {
                 $adyFields['shopper.dateOfBirthDayOfMonth'] = $this->getDate($dob, 'd');
                 $adyFields['shopper.dateOfBirthMonth'] = $this->getDate($dob, 'm');
@@ -145,7 +148,22 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         }
         $adyFields['shopper.telephoneNumber'] = $billingAddress->getTelephone();
         
+        $openinvoiceType = $this->_getConfigData('openinvoicetypes', 'adyen_openinvoice');
         
+//         if($this->_code == "adyen_openinvoice" && $openinvoiceType == "klarna") {
+//         	// initialize values if they are empty
+//         	(isset($adyFields['shopper.gender'])) ? $adyFields['shopper.gender'] : "";
+//         	(isset($adyFields['shopper.infix'])) ? $adyFields['shopper.infix'] : "";
+//         	(isset($adyFields['shopper.dateOfBirthDayOfMonth'])) ? $adyFields['shopper.dateOfBirthDayOfMonth'] : "";
+//         	(isset($adyFields['shopper.dateOfBirthMonth'])) ? $adyFields['shopper.dateOfBirthMonth'] : "";
+//         	(isset($adyFields['shopper.dateOfBirthYear'])) ? $adyFields['shopper.dateOfBirthYear'] : "";
+
+//         	$shoppperSign = $adyFields['shopper.firstName'] . $adyFields['shopper.infix'] . $adyFields['shopper.lastName'] . $adyFields['shopper.gender'] . $adyFields['shopper.dateOfBirthDayOfMonth'] . $adyFields['shopper.dateOfBirthMonth'] . $adyFields['shopper.dateOfBirthYear'] . $adyFields['shopper.telephoneNumber'];      	
+//         	$shopperSignMac = Zend_Crypt_Hmac::compute($secretWord, 'sha1', $shoppperSign);
+//         	$adyFields['shopperSig'] = base64_encode(pack('H*', $shopperSignMac));
+//         }
+        
+
         $count = 0;
         $currency = $order->getOrderCurrencyCode();
         $additional_data_sign = array();
@@ -169,7 +187,7 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         $additional_data_sign['openinvoicedata.' . $linename . '.currencyCode'] = $currency;
         $additional_data_sign['openinvoicedata.' . $linename . '.description'] = Mage::helper('adyen')->__('Total Discount');
         $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $this->_formatAmount($order->getDiscountAmount());
-        $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "000";
+        $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "0";
         $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = 1;
         $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "None";
         
@@ -187,7 +205,7 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         $additional_data_sign['openinvoicedata.' . $linename . '.currencyCode'] = $currency;
         $additional_data_sign['openinvoicedata.' . $linename . '.description'] = Mage::helper('adyen')->__('Tax');
         $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $this->_formatAmount($order->getTaxAmount());
-        $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "000";
+        $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "0";
         $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = 1;
         $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "None";
         
@@ -222,7 +240,6 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         
         $sign_additional_data =  $sign_additional_data_keys . "|" . $sign_additional_data_values;
        
-        $secretWord = $this->_getSecretWord();
         $signMac = Zend_Crypt_Hmac::compute($secretWord, 'sha1', $sign_additional_data);
         $adyFields['openinvoicedata.sig'] =  base64_encode(pack('H*', $signMac));
         
@@ -267,7 +284,7 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         $street = self::formatStreet($address->getStreet());
         $streetName = $street['0'];
         unset($street['0']);
-        $streetNr = implode('',$street);
+        $streetNr = implode('',$street);		
         return new Varien_Object(array('name' => $streetName, 'house_number' => $streetNr));
     }
     
