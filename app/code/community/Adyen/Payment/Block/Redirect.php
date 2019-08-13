@@ -34,9 +34,9 @@
     protected function _getOrder() {
         if ($this->getOrder()) {
             return $this->getOrder();
-        } elseif ($orderIncrementId == $this->_getCheckout()->getLastRealOrderId()) {
-            return Mage::getModel('sales/order')->loadByIncrementId($orderIncrementId);
         } else {
+            // log the exception
+            Mage::log("Redirect exception could not load the order:", Zend_Log::DEBUG, "adyen_notification.log", true);
             return null;
         }
     }
@@ -56,24 +56,24 @@
     		// detect ios or android
     		$ua = strtolower($_SERVER['HTTP_USER_AGENT']);
     		$android = stripos($ua,'android');
-    		
-    		// extra parameters so that you alway's return these paramters from the application
-    		$extra_paramaters = urlencode("/?originalCustomCurrency=".$adyFields['currencyCode']."&originalCustomAmount=".$adyFields['paymentAmount']. "&originalCustomMerchantReference=".$adyFields['merchantReference'] . "&originalCustomSessionId=".session_id());
-    		
-    		// add recurring before the callback url
-    		$recurring_parameters = "&recurringContract=".urlencode($adyFields['recurringContract'])."&shopperReference=".urlencode($adyFields['shopperReference']). "&shopperEmail=".urlencode($adyFields['shopperEmail']);
-    		
-    		// important url must be the latest parameter before extra parameters! otherwise extra parameters won't return in return url
-    		if($android !== false) { // && stripos($ua,'mobile') !== false) {
-    			// watch out some attributes are different from ios (sessionid and callback_automatic) added start_immediately
-    			$launchlink = "adyen://www.adyen.com/?sessionid=".date(U)."&amount=".$adyFields['paymentAmount']."&currency=".$adyFields['currencyCode']."&description=".$adyFields['merchantReference']. $recurring_parameters . "&start_immediately=1&callback_automatic=1&callback=".$url .$extra_paramaters;
-    		} else {
-    			//$launchlink = "adyen://payment?currency=".$adyFields['currencyCode']."&amount=".$adyFields['paymentAmount']."&description=".$adyFields['merchantReference']."&callback=".$url."&sessionId=".session_id()."&callbackAutomatic=1".$extra_paramaters;
-    			$launchlink = "adyen://payment?sessionId=".session_id()."&amount=".$adyFields['paymentAmount']."&currency=".$adyFields['currencyCode']."&description=".$adyFields['merchantReference']. $recurring_parameters . "&callbackAutomatic=1&callback=".$url .$extra_paramaters;
-    		}
-    		
-    		// log the launchlink
-    		Mage::log("Launchlink:".$launchlink, Zend_Log::DEBUG, "adyen_notification.log", true);
+
+            // extra parameters so that you alway's return these paramters from the application
+            $extra_paramaters = urlencode("/?originalCustomCurrency=".$adyFields['currencyCode']."&originalCustomAmount=".$adyFields['paymentAmount']. "&originalCustomMerchantReference=".$adyFields['merchantReference'] . "&originalCustomSessionId=".session_id());
+
+            // add recurring before the callback url
+            $recurring_parameters = "&recurringContract=".urlencode($adyFields['recurringContract'])."&shopperReference=".urlencode($adyFields['shopperReference']). "&shopperEmail=".urlencode($adyFields['shopperEmail']);
+
+            // important url must be the latest parameter before extra parameters! otherwise extra parameters won't return in return url
+            if($android !== false) { // && stripos($ua,'mobile') !== false) {
+                // watch out some attributes are different from ios (sessionid and callback_automatic) added start_immediately
+                $launchlink = "adyen://www.adyen.com/?sessionid=".date(U)."&amount=".$adyFields['paymentAmount']."&currency=".$adyFields['currencyCode']."&description=".$adyFields['merchantReference']. $recurring_parameters . "&start_immediately=1&callback_automatic=1&callback=".$url .$extra_paramaters;
+            } else {
+                //$launchlink = "adyen://payment?currency=".$adyFields['currencyCode']."&amount=".$adyFields['paymentAmount']."&description=".$adyFields['merchantReference']."&callback=".$url."&sessionId=".session_id()."&callbackAutomatic=1".$extra_paramaters;
+                $launchlink = "adyen://payment?sessionId=".session_id()."&amount=".$adyFields['paymentAmount']."&currency=".$adyFields['currencyCode']."&description=".$adyFields['merchantReference']. $recurring_parameters . "&callbackAutomatic=1&callback=".$url .$extra_paramaters;
+            }
+
+            // log the launchlink
+            Mage::log("Launchlink:".$launchlink, Zend_Log::DEBUG, "adyen_notification.log", true);
 
     		// call app directly without HPP
     		$html .= "<div id=\"pos-redirect-page\">
