@@ -191,9 +191,20 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
 
         $billingAddress = $order->getBillingAddress();
         $adyFields['shopper.firstName'] = $billingAddress->getFirstname();
+
+        if($billingAddress->getMiddlename() != "") {
+            $adyFields['shopper.infix'] = $billingAddress->getMiddlename();
+        }
+
         $adyFields['shopper.lastName'] = $billingAddress->getLastname();
-        $adyFields['billingAddress.street'] = $helper->getStreet($billingAddress)->getName();
-        $adyFields['billingAddress.houseNumberOrName'] = $helper->getStreet($billingAddress)->getHouseNumber();
+        $adyFields['billingAddress.street'] = $helper->getStreet($billingAddress,true)->getName();
+
+        if($helper->getStreet($billingAddress,true)->getHouseNumber() == "") {
+            $adyFields['billingAddress.houseNumberOrName'] = "NA";
+        } else {
+            $adyFields['billingAddress.houseNumberOrName'] = $helper->getStreet($billingAddress,true)->getHouseNumber();
+        }
+
         $adyFields['billingAddress.city'] = $billingAddress->getCity();
         $adyFields['billingAddress.postalCode'] = $billingAddress->getPostcode();
         $adyFields['billingAddress.stateOrProvince'] = $billingAddress->getRegionCode();
@@ -213,8 +224,13 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         $deliveryAddress = $order->getShippingAddress();
         if($deliveryAddress != null)
         {
-            $adyFields['deliveryAddress.street'] = $helper->getStreet($deliveryAddress)->getName();
-            $adyFields['deliveryAddress.houseNumberOrName'] = $helper->getStreet($deliveryAddress)->getHouseNumber();
+            $adyFields['deliveryAddress.street'] = $helper->getStreet($deliveryAddress,true)->getName();
+            if($helper->getStreet($deliveryAddress,true)->getHouseNumber() == "") {
+                $adyFields['deliveryAddress.houseNumberOrName'] = "NA";
+            } else {
+                $adyFields['deliveryAddress.houseNumberOrName'] = $helper->getStreet($deliveryAddress,true)->getHouseNumber();
+            }
+
             $adyFields['deliveryAddress.city'] = $deliveryAddress->getCity();
             $adyFields['deliveryAddress.postalCode'] = $deliveryAddress->getPostcode();
             $adyFields['deliveryAddress.stateOrProvince'] = $deliveryAddress->getRegionCode();
@@ -237,8 +253,8 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
 
             $customer = Mage::getModel('customer/customer')->load($adyFields['shopperReference']);
 
-            if($this->getCustomerAttributeText($customer, 'gender') != "") {
-                $adyFields['shopper.gender'] = strtoupper($this->getCustomerAttributeText($customer, 'gender'));
+            if($customer->getGender()) {
+                $adyFields['shopper.gender'] = $this->getGenderText($customer->getGender());
             } else {
                 // fix for OneStepCheckout (guest is not logged in but uses email that exists with account)
                 $_customer = Mage::getModel('customer/customer');
@@ -249,10 +265,9 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
                     $payment = $order->getPayment();
                     $customerGender = $payment->getAdditionalInformation('customerGender');
                 }
-                $adyFields['shopper.gender'] = strtoupper($_customer->getResource()->getAttribute('gender')->getSource()->getOptionText($customerGender));
+                $adyFields['shopper.gender'] = $this->getGenderText($customerGender);
             }
 
-            $adyFields['shopper.infix'] = $customer->getPrefix();
             $dob = $customer->getDob();
 
             if (!empty($dob)) {
@@ -271,8 +286,7 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         } else {
             // checkout as guest use details from the order
             $_customer = Mage::getModel('customer/customer');
-            $adyFields['shopper.gender'] = strtoupper($_customer->getResource()->getAttribute('gender')->getSource()->getOptionText($order->getCustomerGender()));
-            $adyFields['shopper.infix'] = $order->getCustomerPrefix();
+            $adyFields['shopper.gender'] = $this->getGenderText($order->getCustomerGender());
             $dob = $order->getCustomerDob();
             if (!empty($dob)) {
                 $adyFields['shopper.dateOfBirthDayOfMonth'] = $this->getDate($dob, 'd');
@@ -291,7 +305,6 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         if($order->getPayment()->getMethod() == "adyen_openinvoice" || $order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "klarna" || $order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "afterpay_default" ) {
             // initialize values if they are empty
             $adyFields['shopper.gender'] = (isset($adyFields['shopper.gender'])) ? $adyFields['shopper.gender'] : "";
-            $adyFields['shopper.infix'] = (isset($adyFields['shopper.infix'])) ? $adyFields['shopper.infix'] : "";
             $adyFields['shopper.dateOfBirthDayOfMonth'] = (isset($adyFields['shopper.dateOfBirthDayOfMonth'])) ? $adyFields['shopper.dateOfBirthDayOfMonth'] : "";
             $adyFields['shopper.dateOfBirthMonth'] = (isset($adyFields['shopper.dateOfBirthMonth'])) ? $adyFields['shopper.dateOfBirthMonth'] : "";
             $adyFields['shopper.dateOfBirthYear'] = (isset($adyFields['shopper.dateOfBirthYear'])) ? $adyFields['shopper.dateOfBirthYear'] : "";
@@ -316,8 +329,16 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
             $additional_data_sign['openinvoicedata.' . $linename . '.description'] = $item->getName();
             $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $helper->formatAmount($item->getPrice(), $currency);
             $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = ($item->getTaxAmount() > 0 && $item->getPriceInclTax() > 0) ? $helper->formatAmount($item->getPriceInclTax(), $currency) - $helper->formatAmount($item->getPrice(), $currency):$helper->formatAmount($item->getTaxAmount(), $currency);
+
+            // Calculate vat percentage
+            $id = $item->getProductId();
+            $product = $this->_loadProductById($id);
+            $taxRate = $helper->getTaxRate($order, $product->getTaxClassId());
+            $additional_data_sign['openinvoicedata.' . $linename . '.itemVatPercentage'] = $helper->getMinorUnitTaxPercent($taxRate);
+
             $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = (int) $item->getQtyOrdered();
 
+            // afterpay_default_nl ?
             if(($order->getPayment()->getMethod() == "adyen_openinvoice" && $openinvoiceType == "afterpay_default") || ($order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "afterpay_default")) {
                 $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "High";
             } else {
@@ -335,6 +356,7 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
             $additional_data_sign['openinvoicedata.' . $linename . '.description'] = $helper->__('Total Discount');
             $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $helper->formatAmount($order->getDiscountAmount(), $currency);
             $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "0";
+            $additional_data_sign['openinvoicedata.' . $linename . '.itemVatPercentage'] = "0";
             $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = 1;
             if(($order->getPayment()->getMethod() == "adyen_openinvoice" && $openinvoiceType == "afterpay_default") || ($order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "afterpay_default")) {
                 $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "High";
@@ -352,7 +374,14 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
             $additional_data_sign['openinvoicedata.' . $linename . '.description'] = $order->getShippingDescription();
             $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $helper->formatAmount($order->getShippingAmount(), $currency);
             $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = $helper->formatAmount($order->getShippingTaxAmount(), $currency);
+
+            // Calculate vat percentage
+            $taxClass = Mage::getStoreConfig('tax/classes/shipping_tax_class', $order->getStoreId());
+            $taxRate = $helper->getTaxRate($order, $taxClass);
+            $additional_data_sign['openinvoicedata.' . $linename . '.itemVatPercentage'] = $helper->getMinorUnitTaxPercent($taxRate);
+
             $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = 1;
+
             if(($order->getPayment()->getMethod() == "adyen_openinvoice" && $openinvoiceType == "afterpay_default") || ($order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "afterpay_default")) {
                 $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "High";
             } else {
@@ -366,7 +395,9 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
             $additional_data_sign['openinvoicedata.' . $linename . '.description'] = $helper->__('Payment Fee');
             $additional_data_sign['openinvoicedata.' . $linename . '.itemAmount'] = $helper->formatAmount($order->getPaymentFeeAmount(), $currency);
             $additional_data_sign['openinvoicedata.' . $linename . '.itemVatAmount'] = "0";
+            $additional_data_sign['openinvoicedata.' . $linename . '.itemVatPercentage'] = "0";
             $additional_data_sign['openinvoicedata.' . $linename . '.numberOfItems'] = 1;
+
             if(($order->getPayment()->getMethod() == "adyen_openinvoice" && $openinvoiceType == "afterpay_default") || ($order->getPayment()->getMethodInstance()->getInfoInstance()->getCcType() == "afterpay_default")) {
                 $additional_data_sign['openinvoicedata.' . $linename . '.vatCategory'] = "High";
             } else {
@@ -410,15 +441,20 @@ class Adyen_Payment_Model_Adyen_Openinvoice extends Adyen_Payment_Model_Adyen_Hp
         return $adyFields;
     }
 
-    /**
-     * Get Attribute label
-     * @param type $customer
-     * @param type $code
-     * @return type
-     */
-    public function getCustomerAttributeText($customer, $code='gender') {
-        $helper = Mage::helper('adyen');
-        return $helper->htmlEscape($customer->getResource()->getAttribute($code)->getSource()->getOptionText($customer->getGender()));
+    protected function _loadProductById($id)
+    {
+        return Mage::getModel('catalog/product')->load($id);
+    }
+
+    protected function getGenderText($genderId)
+    {
+        $result = "";
+        if($genderId == '1') {
+            $result = 'MALE';
+        } elseif($genderId == '2') {
+            $result = 'FEMALE';
+        }
+        return $result;
     }
 
     /**

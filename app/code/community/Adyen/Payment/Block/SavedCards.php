@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Adyen Payment Module
  *
@@ -24,21 +25,31 @@
  * @property   Adyen B.V
  * @copyright  Copyright (c) 2014 Adyen BV (http://www.adyen.com)
  */
-?>
-<?php
-if ($_info = $this->getInfo()) {
-	if ($this->isCseEnabled()) {
-		echo $this->htmlEscape($this->getMethod()->getTitle());
-	}
-	else {
-		echo $this->__('Name on the Card: %s', $this->htmlEscape($_info->getCcOwner()))."<br/>";
-		echo $this->__('Credit Card Type: %s', $this->htmlEscape($this->getCcTypeName()))."<br/>";
-		echo $this->__('Credit Card Number: xxxx-%s', $this->htmlEscape($_info->getCcLast4()))."<br/>";
-		echo $this->__('Expiration Date: %s/%s', $this->htmlEscape($this->getCcExpMonth()), $this->htmlEscape($_info->getCcExpYear()));
-	}
 
-	if($this->hasInstallments()):
-		echo "<br />" . $this->__('Installments: %s',  $this->htmlEscape($this->getInfo()->getAdditionalInformation('number_of_installments')))."<br/>";
-	endif;
+class Adyen_Payment_Block_SavedCards extends Mage_Core_Block_Template {
+
+
+    public function getlistRecurringDetails() {
+
+
+        $storeId = Mage::app()->getStore()->getStoreId();
+        $customer = Mage::registry('current_customer');
+        $customerId = $customer->getId();
+        $merchantAccount = Mage::getStoreConfig("payment/adyen_abstract/merchantAccount", $storeId);
+        $recurringType = Mage::getStoreConfig("payment/adyen_abstract/recurringtypes", $storeId);
+
+        return Mage::helper('adyen')->getRecurringCards($merchantAccount, $customerId, $recurringType);
+
+    }
+
+    public function getBackUrl()
+    {
+        if ($this->getRefererUrl()) {
+            return $this->getRefererUrl();
+        }
+        return $this->getUrl('customer/account/', array('_secure'=>true));
+    }
+
+
+
 }
-?>

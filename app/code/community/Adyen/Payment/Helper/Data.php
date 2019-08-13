@@ -261,7 +261,7 @@ class Adyen_Payment_Helper_Data extends Mage_Payment_Helper_Data
      * @param $amount
      * @param $currency
      *
-     * @return string
+     * @return int
      */
     public function formatAmount($amount, $currency)
     {
@@ -301,7 +301,7 @@ class Adyen_Payment_Helper_Data extends Mage_Payment_Helper_Data
                 break;
         }
 
-        return number_format($amount, $format, '', '');
+        return (int)number_format($amount, $format, '', '');
     }
 
     public function originalAmount($amount, $currency)
@@ -491,10 +491,10 @@ class Adyen_Payment_Helper_Data extends Mage_Payment_Helper_Data
      * @param type $address
      * @return Varien_Object
      */
-    public function getStreet($address)
+    public function getStreet($address, $klarna = false)
     {
         if (empty($address)) return false;
-        $street = self::formatStreet($address->getStreet());
+        $street = $this->formatStreet($address->getStreet(), $klarna);
         $streetName = $street['0'];
         unset($street['0']);
 //        $streetNr = implode('',$street);
@@ -509,12 +509,25 @@ class Adyen_Payment_Helper_Data extends Mage_Payment_Helper_Data
      * @param type $street
      * @return type $street
      */
-    static public function formatStreet($street)
+    protected function formatStreet($street, $klarna)
     {
-        if (count($street) != 1) {
+        $formatStreetOnMultiStreetLines = false;
+
+        /*
+         * If ignore second line steet is enabled for klarna only look at the first addressfield
+         * and try to substract housenumber
+         */
+        if($klarna) {
+            if($this->getConfigData('ignore_second_address_field','adyen_openinvoice')) {
+                $formatStreetOnMultiStreetLines = true;
+            }
+        }
+
+        if (!$formatStreetOnMultiStreetLines && count($street) != 1) {
             return $street;
         }
-        preg_match('/((\s\d{0,10})|(\s\d{0,10}\w{1,3}))$/i', $street['0'], $houseNumber, PREG_OFFSET_CAPTURE);
+
+        preg_match('/\s(\d+.*)$/i', $street['0'], $houseNumber, PREG_OFFSET_CAPTURE);
         if(!empty($houseNumber['0'])) {
             $_houseNumber = trim($houseNumber['0']['0']);
             $position = $houseNumber['0']['1'];
@@ -524,4 +537,35 @@ class Adyen_Payment_Helper_Data extends Mage_Payment_Helper_Data
         return $street;
     }
 
+    /**
+     * @desc Tax Percentage needs to be in minor units for Adyen
+     * @param $taxPercent
+     * @return int
+     */
+    public function getMinorUnitTaxPercent($taxPercent)
+    {
+        $taxPercent = (int)$taxPercent;
+        return $taxPercent * 100;
+    }
+
+    /**
+     * @desc Calculate the tax rate for tax class based on order details
+     * @param $order
+     * @param $taxClass
+     * @return mixed
+     */
+    public function getTaxRate($order, $taxClass)
+    {
+        // load the customer so we can retrieve the correct tax class id
+        $customer = Mage::getModel('customer/customer')->load($order->getCustomerId());
+        $calculation = Mage::getModel('tax/calculation');
+
+        $request = $calculation->getRateRequest(
+            $order->getShippingAddress(),
+            $order->getBillingAddress(),
+            $customer->getTaxClassId(),
+            $order->getStore()
+        );
+        return $calculation->getRate($request->setProductClassId($taxClass));
+    }
 }
