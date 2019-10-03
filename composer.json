@@ -1,16 +1,19 @@
 {
-    "name": "OpenMageModuleFostering/Adyen_Payment",
+    "name": "OpenMageModuleFostering\/Adyen_Payment",
     "type": "magento-module",
     "license": "Open-Software-License-(OSL-3.0)",
     "homepage": "",
     "description": "Magento Plugin for Payment service provider Adyen",
     "authors": [
-    {
-        "name": "Adyen",
-        "email": "magento@adyen.com"
-    }
-],
+        {
+            "name": "Adyen",
+            "email": "magento@adyen.com"
+        }
+    ],
     "suggest": {
-        "magento-hackathon/magento-composer-installer": "*"
-    }
+        "magento-hackathon\/magento-composer-installer": "*"
+    },
+    "keywords": [
+        "openmage-module"
+    ]
 }
