@@ -1,5 +1,5 @@
 {
-    "name": "OpenMageModuleFostering\/Adyen_Payment",
+    "name": "openmage-module-fostering\/adyen_payment",
     "type": "magento-module",
     "license": "Open-Software-License-(OSL-3.0)",
     "homepage": "",
